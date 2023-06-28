@@ -1,0 +1,142 @@
+############################## Definitions Section ##############################
+
+%active Login : 3;
+%active Uname : 1;
+%active Passwd: 1;
+%active Captcha: 1;
+%active Customer: 1;
+%passive Input: 0;
+
+%active Product: 4;
+%active User: 1;
+%active Cart: 1;
+%active Search: 1;
+%active Catalog: 1;
+%active Category: 1;
+%active Dropdown: 1;
+%active Prod: 0;
+
+%active Payement: 3;
+%active Coupon: 1;
+%active GST: 1;
+%active Card: 1;
+%active UPI: 1;
+%active NetBanking: 1;
+
+%outer login_prod_gate;
+%name login_customer;
+%name login_feature;
+
+%outer prod_pay_gate;
+%name prod_user;
+%name prod_feature;
+
+%name pay_feature;
+%name pay_user;
+
+############################## Reaction Rules ####################################
+
+# Entering username
+Login[x, y, z].(Uname[y].nil | Customer[z] | $0) -> Login[x, y, z].(Uname[y].Input | Customer[z] | $0);
+Login[x, y, z].(Uname[y].Input | Customer[z] | $0) -> Login[x, y, z].(Uname[y].nil | Customer[z] | $0);
+
+# Entering password
+Login[x, y, z].(Passwd[y].nil | Customer[z] | $0) -> Login[x, y, z].(Passwd[y].Input | Customer[z] | $0);
+Login[x, y, z].(Passwd[y].Input | Customer[z] | $0) -> Login[x, y, z].(Passwd[y].nil | Customer[z] | $0);
+
+# Setting Captcha
+Login[x, y, z].(Captcha[y].nil | Customer[z] | $0) -> Login[x, y, z].(Captcha[y].Input | Customer[z] | $0);
+
+# Login without Captcha node
+Login[x, y, z].(Uname[y].Input | Passwd[y].Input | Customer[z]) -> Login[x, y, z].(Uname[y] | Passwd[y] | Customer[z]); # Login Failed
+Login[x, y, z].(Uname[y].Input | Passwd[y].Input | Customer[z]) | Product[x, a, b, c].$0 -> Login[x, y, z].(Uname[y].Input | Passwd[y].Input) | Product[x, a, b, c].(User[c] | $0); # Login Successful
+
+# Login with Captcha node
+Login[x, y, z].(Uname[y].Input | Passwd[y].Input | Captcha[y].Input | Customer[z]) -> Login[x, y, z].(Uname[y] | Passwd[y] | Captcha[y] | Customer[z]); # Login Failed
+Login[x, y, z].(Uname[y].Input | Passwd[y].Input | Captcha[y].Input | Customer[z]) | Product[x, a, b, c].$0 -> Login[x, y, z].(Uname[y].Input | Passwd[y].Input | Captcha[y].Input) | Product[x, a, b, c].(User[c] | $0); # Login Successful
+
+# Adding Captcha node
+Login[x, y, z].(Uname[y].$0 | Passwd[y].$1 | Customer[z]) -> Login[x, y, z].(Uname[y].$0 | Passwd[y].$1 | Captcha[y] | Customer[z]);
+
+# Logging out
+Login[x, y, z].(Uname[y].Input | Passwd[y].Input) | Product[x, a, b, c].(User[c] | Cart[b].$1 | $0) -> Login[x, y, z].(Uname[y].nil | Passwd[y].nil | Customer[z]) | Product[x, a, b, c].(Cart[b].nil | $0); # Without Captcha
+Login[x, y, z].(Uname[y].Input | Passwd[y].Input | Captcha[y].Input) | Product[x, a, b, c].(User[c] | Cart[b].$1 | $0) -> Login[x, y, z].(Uname[y].nil | Passwd[y].nil | Captcha[y].nil | Customer[z]) | Product[x, a, b, c].(Cart[b].nil | $0); # With Captcha
+
+# Entering search phrase
+Product[a, b, c, d].(Search[c].nil | Catalog[c].nil | User[d] | $0) -> Product[a, b, c, d].(Search[c].Input | Catalog[c].nil | User[d] | $0);
+Product[a, b, c, d].(Search[c].Input | Catalog[c].nil | User[d] | $0) -> Product[a, b, c, d].(Search[c].nil | Catalog[c].nil | User[d] | $0);
+
+# Entering category
+Product[a, b, c, d].(Category[c].nil | Catalog[c].nil | User[d] | $0) -> Product[a, b, c, d].(Category[c].Input | Catalog[c].nil | User[d] | $0);
+Product[a, b, c, d].(Category[c].Input | Catalog[c].nil | User[d] | $0) -> Product[a, b, c, d].(Category[c].nil | Catalog[c].nil | User[d] | $0);
+
+# Entering dropdown
+Product[a, b, c, d].(Dropdown[c].nil | Catalog[c].nil | User[d] | $0) -> Product[a, b, c, d].(Dropdown[c].Input | Catalog[c].nil | User[d] | $0);
+Product[a, b, c, d].(Dropdown[c].Input | Catalog[c].nil | User[d] | $0) -> Product[a, b, c, d].(Dropdown[c].nil | Catalog[c].nil | User[d] | $0);
+
+# Fetching products in Catalog
+Product[a, b, c, d].(Search[c].Input | Catalog[c].nil | Category[c].Input | Dropdown[c].Input | User[d] | $0) -> Product[a, b, c, d].(Search[c].Input | Catalog[c].Prod | Category[c].Input | Dropdown[c].Input | User[d] | $0);
+
+# Adding products to Cart
+Product[a, b, c, d].(Catalog[c].Prod | Cart[c].nil | User[d] | $0) -> Product[a, b, c, d].(Catalog[c].Prod | Cart[c].Prod | User[d] | $0);
+
+# Check out
+Product[a, b, c, d].(Cart[c].Prod | User[d] | $0) | Payement[b, x, y].$1 -> Product[a, b, c, d].$0 | Payement[b, x, y].(Cart[x].Prod | User[y] | $1);
+
+# Adding Coupon
+Payement[x, y, z].(Coupon[y].nil | User[z] | $0) -> Payement[x, y, z].(Coupon[y].Input | User[z] | $0);
+Payement[x, y, z].(Coupon[y].Input | User[z] | $0) -> Payement[x, y, z].(Coupon[y].nil | User[z] | $0);
+
+# Selecting Payement Method without UPI
+Payement[x, y, z].(Coupon[y].$0 | GST[y] | NetBanking[y].nil | Card[y].nil | Cart[y].Prod | User[z]) -> Payement[x, y, z].(Coupon[y].$0 | GST[y] | NetBanking[y].Input | Card[y].nil | Cart[y].Prod | User[z]);
+Payement[x, y, z].(Coupon[y].$0 | GST[y] | NetBanking[y].nil | Card[y].nil | Cart[y].Prod | User[z]) -> Payement[x, y, z].(Coupon[y].$0 | GST[y] | NetBanking[y].nil | Card[y].Input | Cart[y].Prod | User[z]);
+
+# Adding UPI node
+Payement[x, y, z].(Coupon[y].$0 | GST[y] | NetBanking[y].nil | Card[y].nil | Cart[y].Prod | User[z]) -> Payement[x, y, z].(Coupon[y].$0 | GST[y] | NetBanking[y].nil | Card[y].nil | UPI[y] | Cart[y].Prod | User[z]);
+
+# Selecting Payement Method with UPI
+Payement[x, y, z].(Coupon[y].$0 | GST[y] | NetBanking[y].nil | Card[y].nil | UPI[y].nil | Cart[y].Prod | User[z]) -> Payement[x, y, z].(Coupon[y].$0 | GST[y] | NetBanking[y].Input | Card[y].nil | UPI[y].nil | Cart[y].Prod | User[z]);
+Payement[x, y, z].(Coupon[y].$0 | GST[y] | NetBanking[y].nil | Card[y].nil | UPI[y].nil | Cart[y].Prod | User[z]) -> Payement[x, y, z].(Coupon[y].$0 | GST[y] | NetBanking[y].nil | Card[y].Input | UPI[y].nil | Cart[y].Prod | User[z]);
+Payement[x, y, z].(Coupon[y].$0 | GST[y] | NetBanking[y].nil | Card[y].nil | UPI[y].nil | Cart[y].Prod | User[z]) -> Payement[x, y, z].(Coupon[y].$0 | GST[y] | NetBanking[y].nil | Card[y].nil | UPI[y].Input | Cart[y].Prod | User[z]);
+
+# Successful Payement
+Payement[x, y, z].(Coupon[y].$0 | NetBanking[y].Input | Cart[y].Prod | User[z] | $1) | Product[a, x, c, d].(Search[c].Input | Catalog[c].Prod | Category[c].Input | Dropdown[c].Input) -> Payement[x, y, z].(Coupon[y].nil | NetBanking[y].nil | $1) | Product[a, x, c, d].(Search[c].nil | Catalog[c].nil | Category[c].nil | Dropdown[c].nil | Cart[c].nil | User[d]);
+Payement[x, y, z].(Coupon[y].$0 | Card[y].Input | Cart[y].Prod | User[z] | $1) | Product[a, x, c, d].(Search[c].Input | Catalog[c].Prod | Category[c].Input | Dropdown[c].Input) -> Payement[x, y, z].(Coupon[y].nil | Card[y].nil | $1) | Product[a, x, c, d].(Search[c].nil | Catalog[c].nil | Category[c].nil | Dropdown[c].nil | Cart[c].nil | User[d]);
+Payement[x, y, z].(Coupon[y].$0 | UPI[y].Input | Cart[y].Prod | User[z] | $1) | Product[a, x, c, d].(Search[c].Input | Catalog[c].Prod | Category[c].Input | Dropdown[c].Input) -> Payement[x, y, z].(Coupon[y].nil | UPI[y].nil | $1) | Product[a, x, c, d].(Search[c].nil | Catalog[c].nil | Category[c].nil | Dropdown[c].nil | Cart[c].nil | User[d]);
+
+############################## ECommerce Model  ##################################
+
+Login[login_prod_gate, login_feature, login_customer].(
+	Uname[login_feature] |
+	Passwd[login_feature] |
+	Customer[login_customer]
+) |
+Product[login_prod_gate, prod_pay_gate, prod_feature, prod_user].(
+	Cart[prod_feature] |
+	Search[prod_feature] |
+	Catalog[prod_feature] |
+	Category[prod_feature] |
+	Dropdown[prod_feature]
+) | 
+Payement[prod_pay_gate, pay_feature, pay_user].(
+	Coupon[pay_feature] |
+	GST[pay_feature] |
+	NetBanking[pay_feature] |
+	Card[pay_feature]
+);
+
+############################## Properties  #######################################
+
+%property deadlock_free !terminal();
+%property ensure_login matches(Customer[z]) || matches(Login[x, y, z].(Uname[y].Input | Passwd[y].Input));
+%property ensure_captcha !matches(Login[x, y, z].(Captcha[y].nil | $0) | Product[x, a, b, c].(User[c] | $1));
+%property ensure_catalog_input1 !matches(Search[c].nil | Catalog[c].Prod);
+%property ensure_catalog_input2 !matches(Category[c].nil | Catalog[c].Prod);
+%property ensure_catalog_input3 !matches(Dropdown[c].nil | Catalog[c].Prod);
+%property user_cart_connection matches(Customer[z]) || matches(User[d] | Cart[c].$0);
+%property ensure_valid_product !matches(Cart[c].Prod | Catalog[c].nil);
+%property no_empty_checkout !matches(Payement[x, y, z].(Cart[y].nil | $0));
+%property ensure_payement_method matches(Card[y].$0);
+
+%check;
+
